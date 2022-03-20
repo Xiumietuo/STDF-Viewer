@@ -4,7 +4,7 @@
 # Author: noonchen - chennoon233@foxmail.com
 # Created Date: December 13th 2020
 # -----
-# Last Modified: Sun Mar 13 2022
+# Last Modified: Sun Mar 20 2022
 # Modified By: noonchen
 # -----
 # Copyright (c) 2020 noonchen
@@ -448,10 +448,15 @@ class MagCursor(QObject):
             self.dcp_wafer.set_visible(False)
             self.highlights_wafer = []      # a list to store instances of ax.add_patch()
             
-        self.hint = self.ax.text(s=self.tr("Press 'Enter' to show DUT data of selection(s)"), 
+        self.hint = self.ax.text(s=self.tr("Hold 'Shift' to select multiple objects\nPress 'Enter' to show DUT data of selection(s)"), 
                                  x=1, y=1, transform=self.ax.transAxes, va="bottom", ha="right", 
                                  fontname=mainGUI.imageFont, fontsize=8, zorder=1000)
         self.hint.set_visible(False)
+        # info of selections
+        self.selectionInfo = self.ax.text(s="",
+                                          x=0, y=-0.2, transform=self.ax.transAxes, va="top", ha="left",
+                                          fontname="Courier New", fontsize=8, zorder=1000)
+        self.selectionInfo.set_visible(False)
         # mainGUI for show dut date table
         self.mainGUI = mainGUI
         self.updatePrecision(self.mainGUI.settingParams.dataPrecision, 
@@ -709,6 +714,7 @@ class MagCursor(QObject):
         
         if self.lineMode:
             ind = event.ind[0]
+            # line point is the actual value
             point = (event.artist.get_xdata()[ind], event.artist.get_ydata()[ind])
         
         elif self.histoMode:
@@ -716,6 +722,7 @@ class MagCursor(QObject):
             leftEdge = event.artist.get_x()
             for ind, rec_hl in enumerate(self.histo):
                 if rec_hl.get_x() == leftEdge:
+                    # histo point is the rect index
                     point = ind
                     break
             
@@ -730,6 +737,7 @@ class MagCursor(QObject):
             leftEdge = event.artist.get_x()
             for ind, rec_hl in enumerate(self.binchart):
                 if rec_hl.get_x() == leftEdge:
+                    # bin point is the rect index
                     point = ind
                     break
         
@@ -751,6 +759,7 @@ class MagCursor(QObject):
                         failCount = pcol.get_array()[rec_index]
                         if isinstance(failCount, np.ma.core.MaskedConstant):
                             return
+                    # wafer point is the center coord of squares
                     point = (rec_bounds.x0+.5, rec_bounds.y0+.5)
                     break
             else:
@@ -788,6 +797,8 @@ class MagCursor(QObject):
                     self.ax.add_patch(matplotlib.patches.Rectangle((x-0.5, y-0.5), 1, 1, fc=(0,0,0,0), ec="red", linewidth=2, zorder=100))
                 
             self.hint.set_visible(True)
+            self.selectionInfo.set_text(self.stringifySelections())
+            self.selectionInfo.set_visible(True)
         else:
             self.resetPointSelection()
         self.copyBackground()
@@ -808,6 +819,30 @@ class MagCursor(QObject):
             self.ax.patches.clear()
         
         self.hint.set_visible(False)
+        self.selectionInfo.set_text("")
+        self.selectionInfo.set_visible(False)
+        
+    def stringifySelections(self):
+        if self.lineMode:
+            nInRow = 5
+            textList = (['DUT#%d: ' % x + self.valueFormat % y + ";" for (x, y) in self.picked_points])
+            
+        elif self.histoMode:
+            nInRow = 3
+            recList = ([self.histo[ind] for ind in self.picked_points])
+            textList = [f'[{self.valueFormat % rec.get_x()}, {self.valueFormat % (rec.get_x() + rec.get_width())})' for rec in recList]
+        
+        elif self.binMode:
+            nInRow = 1
+            textList = ([f"Bin#{self.binchart.binList[ind]}: {self.binchart.binNames[ind]}" for ind in self.picked_points])
+        
+        elif self.waferMode:
+            nInRow = 5
+            textList = ([f'({x}, {y})' for (x, y) in self.picked_points])
+        
+        nRow = len(textList) // nInRow + (1 if len(textList) % nInRow > 0 else 0)
+        text = "\n".join( ["    ".join(textList[row*nInRow : row*nInRow + nInRow]) for row in range(nRow)] )
+        return text
 
 
 class SettingParams:
